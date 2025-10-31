@@ -3,13 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Simulador de Colisiones — versión corregida</title>
-
-<!-- Chart.js (UMD build) -->
+<title>Simulador de Colisiones — Energías</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-
 <style>
-  body { font-family: Arial, Helvetica, sans-serif; background:#f3f4f7; margin:0; padding:18px; text-align:center;}
+  body { font-family: Arial, Helvetica, sans-serif; background:#f6f7fb; margin:0; padding:18px; text-align:center;}
   h1{margin:6px 0 14px}
   .controls{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:12px}
   .controls label{font-size:14px;margin-right:6px}
@@ -19,10 +16,11 @@
   .charts{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:12px}
   .chartBox{background:#fff;border:1px solid #ccc;padding:8px;border-radius:8px}
   small{color:#555;display:block;margin-top:6px}
+  .info {margin-top:10px; font-size:14px;}
 </style>
 </head>
 <body>
-  <h1>Simulador de Colisiones — versión corregida</h1>
+  <h1>Simulador: Energías de dos esferas</h1>
 
   <div class="controls">
     <div>
@@ -34,12 +32,8 @@
       <input id="massB" type="number" value="1.0" step="0.1" min="0.01">
     </div>
     <div>
-      <label for="friction">Rozamiento (0–0.5)</label><br>
-      <input id="friction" type="number" value="0.02" step="0.005" min="0" max="0.5">
-    </div>
-    <div>
-      <label for="restitution">Restitución (0–1)</label><br>
-      <input id="restitution" type="number" value="0.95" step="0.05" min="0" max="1">
+      <label for="gravity">Gravedad (m/s²)</label><br>
+      <input id="gravity" type="number" value="9.8" step="0.1" min="0">
     </div>
     <div style="align-self:end">
       <button id="btnReset">Reiniciar</button>
@@ -49,225 +43,174 @@
 
   <canvas id="simCanvas" width="760" height="360"></canvas>
 
+  <div class="info">
+    <span id="textTime">t = 0.00 s</span>
+  </div>
+
   <div class="charts">
     <div class="chartBox">
-      <h4>Energía (cinética y potencial)</h4>
-      <canvas id="energyChart" width="420" height="220"></canvas>
-      <small>Se muestran Ecinética A/B y Epotencial A/B</small>
-    </div>
-
-    <div class="chartBox">
-      <h4>Velocidad (módulo) vs tiempo</h4>
-      <canvas id="velChart" width="320" height="220"></canvas>
-      <small>Velocidad de A y B</small>
+      <h4>Energías vs tiempo</h4>
+      <canvas id="energyChart" width="560" height="260"></canvas>
+      <small>Ecin A (rojo), Ecin B (azul), Epot A (naranja), Epot B (teal)</small>
     </div>
   </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  /* ---------- referencias DOM ---------- */
+  // DOM
   const canvas = document.getElementById('simCanvas');
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
-
   const massAInput = document.getElementById('massA');
   const massBInput = document.getElementById('massB');
-  const frictionInput = document.getElementById('friction');
-  const restitutionInput = document.getElementById('restitution');
+  const gravityInput = document.getElementById('gravity');
   const btnReset = document.getElementById('btnReset');
   const btnPause = document.getElementById('btnPause');
+  const textTime = document.getElementById('textTime');
 
-  /* ---------- estado ---------- */
-  const state = {
-    ballA: null,
-    ballB: null,
-    friction: 0.02,
-    restitution: 0.95,
+  // estado
+  let state = {
+    A: null,
+    B: null,
     running: true,
     lastTime: null,
     elapsed: 0
   };
 
   const MAX_POINTS = 300;
-  const G = 9.8; // para energía potencial (escala visual)
 
-  /* ---------- utilitarios ---------- */
+  // helpers
   function randVel(scale=60){ return (Math.random()*2-1)*scale; }
-  function mag(vx,vy){ return Math.hypot(vx,vy); }
+  function mag(vx,vy){ return Math.hypot(vx,vx?vy:vy); } // robusto
 
-  /* ---------- inicialización del sistema ---------- */
+  // inicializa las bolas
   function initSystem(){
-    const mA = Math.max(0.01, parseFloat(massAInput.value) || 1);
-    const mB = Math.max(0.01, parseFloat(massBInput.value) || 1);
-    state.friction = Math.max(0, Math.min(0.5, parseFloat(frictionInput.value) || 0));
-    state.restitution = Math.max(0, Math.min(1, parseFloat(restitutionInput.value) || 0.95));
-
+    const mA = Math.max(0.01, parseFloat(massAInput.value)||1);
+    const mB = Math.max(0.01, parseFloat(massBInput.value)||1);
     const rA = 8 + mA*5;
     const rB = 8 + mB*5;
 
-    state.ballA = { x: 120, y: H/2 - 30, vx: randVel(80), vy: randVel(40), r: rA, m: mA, color:'red' };
-    state.ballB = { x: W-120, y: H/2 + 30, vx: -randVel(80), vy: -randVel(40), r: rB, m: mB, color:'blue' };
+    state.A = { x: 120, y: H/2 - 30, vx: randVel(80), vy: randVel(40), r: rA, m: mA, color:'red' };
+    state.B = { x: W-120, y: H/2 + 30, vx: -randVel(80), vy: -randVel(40), r: rB, m: mB, color:'blue' };
 
-    state.lastTime = performance.now();
     state.elapsed = 0;
+    state.lastTime = performance.now();
 
-    // limpiar gráficas
-    clearCharts();
+    // limpiar gráfico
+    energyChart.data.labels = [];
+    energyChart.data.datasets.forEach(ds => ds.data = []);
+    energyChart.update();
   }
 
-  /* ---------- colisión robusta 2D entre círculos ---------- */
-  function handleBallCollision(A, B, restitution){
+  // detección y resolución de colisión (impulso normal 2D)
+  function resolveCollision(A,B){
     const dx = B.x - A.x, dy = B.y - A.y;
     const dist = Math.hypot(dx,dy);
     if(dist === 0) return;
     const overlap = A.r + B.r - dist;
-    if(overlap > 0){
-      // separar ligeramente para evitar "pegado"
-      const nx = dx/dist, ny = dy/dist;
-      const correction = overlap/2 + 0.01;
-      A.x -= nx * correction;
-      A.y -= ny * correction;
-      B.x += nx * correction;
-      B.y += ny * correction;
+    if(overlap <= 0) return;
 
-      // velocidad relativa en normal
-      const rel = (A.vx - B.vx)*nx + (A.vy - B.vy)*ny;
-      if(rel > 0) return; // se están separando
+    // separar para evitar pegado
+    const nx = dx/dist, ny = dy/dist;
+    const corr = overlap/2 + 0.01;
+    A.x -= nx*corr; A.y -= ny*corr;
+    B.x += nx*corr; B.y += ny*corr;
 
-      // impulso escalar
-      const impulse = -(1 + restitution) * rel / (1/A.m + 1/B.m);
+    // componente normal de la velocidad relativa
+    const rel = (A.vx - B.vx)*nx + (A.vy - B.vy)*ny;
+    if (rel >= 0) return; // se separan
 
-      const ix = impulse * nx;
-      const iy = impulse * ny;
+    // impulso (asumiendo restitución elástica parcial = 1)
+    const restitution = 1.0; // elasticidad pura por ahora
+    const j = -(1 + restitution) * rel / (1/A.m + 1/B.m);
 
-      A.vx += ix / A.m;
-      A.vy += iy / A.m;
-      B.vx -= ix / B.m;
-      B.vy -= iy / B.m;
-    }
+    const jx = j * nx, jy = j * ny;
+    A.vx += jx / A.m; A.vy += jy / A.m;
+    B.vx -= jx / B.m; B.vy -= jy / B.m;
   }
 
-  function handleWallCollision(ball, restitution){
-    if(ball.x - ball.r < 0){
-      ball.x = ball.r;
-      if(ball.vx < 0) ball.vx = -ball.vx * restitution;
-    }
-    if(ball.x + ball.r > W){
-      ball.x = W - ball.r;
-      if(ball.vx > 0) ball.vx = -ball.vx * restitution;
-    }
-    if(ball.y - ball.r < 0){
-      ball.y = ball.r;
-      if(ball.vy < 0) ball.vy = -ball.vy * restitution;
-    }
-    if(ball.y + ball.r > H){
-      ball.y = H - ball.r;
-      if(ball.vy > 0) ball.vy = -ball.vy * restitution;
-    }
+  // manejo paredes (rebote perfecto)
+  function handleWall(ball){
+    if(ball.x - ball.r < 0){ ball.x = ball.r; ball.vx = -ball.vx; }
+    if(ball.x + ball.r > W){ ball.x = W - ball.r; ball.vx = -ball.vx; }
+    if(ball.y - ball.r < 0){ ball.y = ball.r; ball.vy = -ball.vy; }
+    if(ball.y + ball.r > H){ ball.y = H - ball.r; ball.vy = -ball.vy; }
   }
 
-  /* ---------- gráficos (Chart.js) - creados una vez ---------- */
+  // Gráfico de energías (Chart.js)
   const energyCtx = document.getElementById('energyChart').getContext('2d');
-  const velCtx = document.getElementById('velChart').getContext('2d');
-
   const energyChart = new Chart(energyCtx, {
     type: 'line',
     data: {
       labels: [],
       datasets: [
-        {label:'Ecin A', data:[], borderColor:'red', tension:0.2, pointRadius:0},
-        {label:'Ecin B', data:[], borderColor:'blue', tension:0.2, pointRadius:0},
-        {label:'Epot A', data:[], borderColor:'orange', tension:0.2, pointRadius:0},
-        {label:'Epot B', data:[], borderColor:'teal', tension:0.2, pointRadius:0}
+        { label: 'Ecin A (J)', data: [], borderColor: 'red', tension: 0.2, pointRadius: 0 },
+        { label: 'Ecin B (J)', data: [], borderColor: 'blue', tension: 0.2, pointRadius: 0 },
+        { label: 'Epot A (J)', data: [], borderColor: 'orange', tension: 0.2, pointRadius: 0 },
+        { label: 'Epot B (J)', data: [], borderColor: 'teal', tension: 0.2, pointRadius: 0 }
       ]
     },
-    options: { animation:false, plugins:{legend:{position:'bottom'}}, scales:{x:{title:{display:true,text:'t (s)'}}}}
+    options: {
+      animation: false,
+      plugins: { legend: { position: 'bottom' } },
+      scales: { x: { title:{display:true, text:'t (s)'} }, y:{ title:{display:true,text:'E (J)'} } }
+    }
   });
 
-  const velChart = new Chart(velCtx, {
-    type: 'line',
-    data: { labels: [], datasets:[
-      {label:'|v| A', data:[], borderColor:'red', tension:0.2, pointRadius:0},
-      {label:'|v| B', data:[], borderColor:'blue', tension:0.2, pointRadius:0}
-    ]},
-    options:{ animation:false, plugins:{legend:{position:'bottom'}}, scales:{x:{title:{display:true,text:'t (s)'}}}}
-  });
-
-  function clearCharts(){
-    [energyChart, velChart].forEach(ch => {
-      ch.data.labels = [];
-      ch.data.datasets.forEach(ds => ds.data = []);
-      ch.update();
-    });
-  }
-
-  function pushData(t, eA, eB, pA, pB, vA, vB){
+  // añadir punto al gráfico manteniendo límite
+  function pushEnergyData(t, EcinA, EcinB, EpotA, EpotB){
     energyChart.data.labels.push(t.toFixed(2));
-    energyChart.data.datasets[0].data.push(eA);
-    energyChart.data.datasets[1].data.push(eB);
-    energyChart.data.datasets[2].data.push(pA);
-    energyChart.data.datasets[3].data.push(pB);
+    energyChart.data.datasets[0].data.push(EcinA);
+    energyChart.data.datasets[1].data.push(EcinB);
+    energyChart.data.datasets[2].data.push(EpotA);
+    energyChart.data.datasets[3].data.push(EpotB);
 
-    velChart.data.labels.push(t.toFixed(2));
-    velChart.data.datasets[0].data.push(vA);
-    velChart.data.datasets[1].data.push(vB);
-
-    // limitar puntos
     if(energyChart.data.labels.length > MAX_POINTS){
       energyChart.data.labels.shift();
       energyChart.data.datasets.forEach(ds => ds.data.shift());
     }
-    if(velChart.data.labels.length > MAX_POINTS){
-      velChart.data.labels.shift();
-      velChart.data.datasets.forEach(ds => ds.data.shift());
-    }
+    energyChart.update('none');
   }
 
-  /* ---------- bucle de simulación ---------- */
+  // bucle de animación / física
   function step(now){
-    if(!state.running){
-      state.lastTime = now;
-      requestAnimationFrame(step);
-      return;
-    }
+    if(!state.running){ state.lastTime = now; requestAnimationFrame(step); return; }
     const last = state.lastTime || now;
     let dt = (now - last) / 1000;
     if(dt > 0.05) dt = 0.05;
     state.lastTime = now;
     state.elapsed += dt;
 
-    // actualizar posiciones y velocidades
-    const A = state.ballA, B = state.ballB;
+    // actualizar posiciones
+    const A = state.A, B = state.B;
     A.x += A.vx * dt; A.y += A.vy * dt;
     B.x += B.vx * dt; B.y += B.vy * dt;
 
-    // rozamiento proporcional a dt
-    const fr = state.friction;
-    A.vx *= (1 - fr*dt); A.vy *= (1 - fr*dt);
-    B.vx *= (1 - fr*dt); B.vy *= (1 - fr*dt);
-
-    // colisiones con paredes
-    handleWallCollision(A, state.restitution);
-    handleWallCollision(B, state.restitution);
+    // paredes
+    handleWall(A); handleWall(B);
 
     // colisión bola-bola
-    handleBallCollision(A, B, state.restitution);
+    resolveCollision(A,B);
 
-    // energías y muestreo periódico
-    const vA = mag(A.vx, A.vy), vB = mag(B.vx, B.vy);
+    // energías
+    const vA = Math.hypot(A.vx, A.vy), vB = Math.hypot(B.vx, B.vy);
     const EcinA = 0.5 * A.m * vA * vA;
     const EcinB = 0.5 * B.m * vB * vB;
-    const EpotA = A.m * G * (H - A.y) * 0.01;
-    const EpotB = B.m * G * (H - B.y) * 0.01;
 
-    // muestreo cada ~0.05 s (controlado por dt acumulado)
-    if(state.elapsed % 0.05 < dt){
-      pushData(state.elapsed, EcinA, EcinB, EpotA, EpotB, vA, vB);
-      energyChart.update('none');
-      velChart.update('none');
-    }
+    // energía potencial respecto al "suelo" y con gravedad ajustable
+    const g = parseFloat(gravityInput.value) || 9.8;
+    const EpotA = A.m * g * (H - A.y) * 0.01; // factor 0.01 para escala visual
+    const EpotB = B.m * g * (H - B.y) * 0.01;
 
+    // añadir punto cada dt (puede muestrearse menos si es necesario)
+    pushEnergyData(state.elapsed, EcinA, EcinB, EpotA, EpotB);
+
+    // dibujar
     drawScene();
+
+    // mostrar tiempo
+    textTime.textContent = 't = ' + state.elapsed.toFixed(2) + ' s';
+
     requestAnimationFrame(step);
   }
 
@@ -276,43 +219,37 @@ document.addEventListener('DOMContentLoaded', () => {
     ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
     ctx.strokeRect(1,1,W-2,H-2);
 
-    [state.ballA, state.ballB].forEach(b=>{
+    [state.A, state.B].forEach(b=>{
       ctx.beginPath();
       ctx.fillStyle = b.color;
       ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
       ctx.fill();
       ctx.closePath();
 
-      // vector velocidad
+      // dibujar vector velocidad (pequeño)
       ctx.beginPath();
       ctx.moveTo(b.x, b.y);
-      ctx.lineTo(b.x + b.vx*0.12, b.y + b.vy*0.12);
+      ctx.lineTo(b.x + b.vx*0.1, b.y + b.vy*0.1);
       ctx.strokeStyle = 'rgba(0,0,0,0.35)';
       ctx.lineWidth = 2;
       ctx.stroke();
     });
   }
 
-  /* ---------- UI events ---------- */
+  // controles UI
   btnReset.addEventListener('click', ()=> initSystem());
-  btnPause.addEventListener('click', ()=> {
-    state.running = !state.running;
-    btnPause.textContent = state.running ? 'Pausa' : 'Reanudar';
-  });
+  btnPause.addEventListener('click', ()=> { state.running = !state.running; btnPause.textContent = state.running ? 'Pausa' : 'Reanudar'; });
 
-  // reiniciar si cambian parámetros (masas / rozamiento / restitución)
-  [massAInput, massBInput, frictionInput, restitutionInput].forEach(inp=>{
-    inp.addEventListener('change', ()=> initSystem());
-  });
+  // reinicia automáticamente si se cambian masas o gravedad
+  [massAInput, massBInput, gravityInput].forEach(i => i.addEventListener('change', ()=> initSystem()));
 
-  // iniciar todo
+  // init + arrancar
   initSystem();
   requestAnimationFrame(step);
 
-  // captura global de errores: manda consola para depuración
+  // captura errores para depurar (si aparece alguno pegalo acá)
   window.addEventListener('error', (e)=> {
     console.error('Error capturado:', e.message, 'en', e.filename, 'línea', e.lineno);
-    // no alert automático para no molestar, el usuario puede ver consola
   });
 });
 </script>
