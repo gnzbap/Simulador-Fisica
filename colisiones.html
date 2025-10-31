@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Simulador de Colisiones en Física</title>
+<title>Simulador de Colisiones</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
   body {
     font-family: Arial, sans-serif;
     text-align: center;
-    background: #f5f5f5;
+    background: #f4f4f4;
     margin: 0;
     padding: 20px;
   }
@@ -35,17 +35,25 @@
 </head>
 <body>
 <h1>Simulador de Colisiones</h1>
+
 <div class="controls">
   <div class="control-group">
-    <label>Masa A (kg): </label><input type="number" id="massA" value="2" step="0.1">
-    <label>Masa B (kg): </label><input type="number" id="massB" value="1" step="0.1">
+    <label>Masa A (kg): </label>
+    <input type="number" id="massA" value="2" step="0.1">
+    <label>Masa B (kg): </label>
+    <input type="number" id="massB" value="1" step="0.1">
   </div>
+
   <div class="control-group">
-    <label>Rozamiento: </label><input type="number" id="friction" value="0.01" step="0.01" min="0" max="1">
+    <label>Rozamiento (0–1): </label>
+    <input type="number" id="friction" value="0.01" step="0.01" min="0" max="1">
   </div>
+
   <div class="control-group">
-    <label>Coeficiente de restitución (0-1): </label><input type="number" id="restitution" value="1" step="0.1" min="0" max="1">
+    <label>Coeficiente de restitución (0–1): </label>
+    <input type="number" id="restitution" value="0.9" step="0.1" min="0" max="1">
   </div>
+
   <button onclick="resetSimulation()">Reiniciar simulación</button>
 </div>
 
@@ -57,15 +65,17 @@
 <script>
 const canvas = document.getElementById('simCanvas');
 const ctx = canvas.getContext('2d');
-let width = canvas.width, height = canvas.height;
+const width = canvas.width, height = canvas.height;
 
+// Variables globales
 let ballA, ballB, friction, restitution;
 let time = 0;
-let energyData = { kineticA: [], kineticB: [], potentialA: [], potentialB: [], time: [] };
-let velocityData = { vA: [], vB: [], time: [] };
+let energyData = { time: [], EA: [], EB: [], PA: [], PB: [] };
+let velocityData = { time: [], vA: [], vB: [] };
 
+// Inicialización
 function randomVelocity() {
-  return (Math.random() * 2 - 1) * 100; // velocidad aleatoria entre -100 y 100 px/s
+  return (Math.random() * 2 - 1) * 100;
 }
 
 function init() {
@@ -81,52 +91,57 @@ function init() {
   ballB = { x: 500, y: 150, vx: randomVelocity(), vy: randomVelocity(), r: rB, m: mB, color: "blue" };
 
   time = 0;
-  energyData = { kineticA: [], kineticB: [], potentialA: [], potentialB: [], time: [] };
-  velocityData = { vA: [], vB: [], time: [] };
+  energyData = { time: [], EA: [], EB: [], PA: [], PB: [] };
+  velocityData = { time: [], vA: [], vB: [] };
 }
 
+// Actualización de física
 function update(dt) {
   [ballA, ballB].forEach(ball => {
     ball.x += ball.vx * dt;
     ball.y += ball.vy * dt;
 
-    // Aplicar rozamiento
+    // Rozamiento
     ball.vx *= (1 - friction * dt);
     ball.vy *= (1 - friction * dt);
 
     // Rebote en los bordes
-    if (ball.x - ball.r < 0 || ball.x + ball.r > width) ball.vx *= -restitution;
-    if (ball.y - ball.r < 0 || ball.y + ball.r > height) ball.vy *= -restitution;
-    ball.x = Math.max(ball.r, Math.min(width - ball.r, ball.x));
-    ball.y = Math.max(ball.r, Math.min(height - ball.r, ball.y));
+    if (ball.x - ball.r < 0 || ball.x + ball.r > width) {
+      ball.vx *= -restitution;
+      ball.x = Math.max(ball.r, Math.min(width - ball.r, ball.x));
+    }
+    if (ball.y - ball.r < 0 || ball.y + ball.r > height) {
+      ball.vy *= -restitution;
+      ball.y = Math.max(ball.r, Math.min(height - ball.r, ball.y));
+    }
   });
 
-  // Detectar colisión entre A y B
-  let dx = ballB.x - ballA.x;
-  let dy = ballB.y - ballA.y;
-  let dist = Math.sqrt(dx * dx + dy * dy);
+  // Colisión entre A y B
+  const dx = ballB.x - ballA.x;
+  const dy = ballB.y - ballA.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
   if (dist < ballA.r + ballB.r) {
-    let nx = dx / dist;
-    let ny = dy / dist;
-    let p = 2 * (ballA.vx * nx + ballA.vy * ny - ballB.vx * nx - ballB.vy * ny) / (ballA.m + ballB.m);
+    const nx = dx / dist;
+    const ny = dy / dist;
+    const p = 2 * (ballA.vx * nx + ballA.vy * ny - ballB.vx * nx - ballB.vy * ny) / (ballA.m + ballB.m);
     ballA.vx -= p * ballB.m * nx * restitution;
     ballA.vy -= p * ballB.m * ny * restitution;
     ballB.vx += p * ballA.m * nx * restitution;
     ballB.vy += p * ballA.m * ny * restitution;
   }
 
-  // Guardar datos para gráficos
+  // Energías y velocidades
   const g = 9.8;
-  const EkA = 0.5 * ballA.m * (ballA.vx**2 + ballA.vy**2);
-  const EkB = 0.5 * ballB.m * (ballB.vx**2 + ballB.vy**2);
-  const EpA = ballA.m * g * (height - ballA.y);
-  const EpB = ballB.m * g * (height - ballB.y);
+  const EA = 0.5 * ballA.m * (ballA.vx**2 + ballA.vy**2);
+  const EB = 0.5 * ballB.m * (ballB.vx**2 + ballB.vy**2);
+  const PA = ballA.m * g * (height - ballA.y);
+  const PB = ballB.m * g * (height - ballB.y);
 
   energyData.time.push(time);
-  energyData.kineticA.push(EkA);
-  energyData.kineticB.push(EkB);
-  energyData.potentialA.push(EpA);
-  energyData.potentialB.push(EpB);
+  energyData.EA.push(EA);
+  energyData.EB.push(EB);
+  energyData.PA.push(PA);
+  energyData.PB.push(PB);
 
   velocityData.time.push(time);
   velocityData.vA.push(Math.sqrt(ballA.vx**2 + ballA.vy**2));
@@ -135,6 +150,7 @@ function update(dt) {
   time += dt;
 }
 
+// Dibujo
 function draw() {
   ctx.clearRect(0, 0, width, height);
   [ballA, ballB].forEach(ball => {
@@ -146,14 +162,7 @@ function draw() {
   });
 }
 
-function loop() {
-  update(0.02);
-  draw();
-  updateCharts();
-  requestAnimationFrame(loop);
-}
-
-// Gráficos con Chart.js
+// Gráficos
 const energyChart = new Chart(document.getElementById('energyChart'), {
   type: 'line',
   data: { labels: [], datasets: [
@@ -174,13 +183,14 @@ const velocityChart = new Chart(document.getElementById('velocityChart'), {
   options: { animation: false, scales: { y: { beginAtZero: true } } }
 });
 
+// Actualización de gráficos
 function updateCharts() {
-  if (energyData.time.length % 5 === 0) {
+  if (energyData.time.length % 10 === 0) {
     energyChart.data.labels = energyData.time;
-    energyChart.data.datasets[0].data = energyData.kineticA;
-    energyChart.data.datasets[1].data = energyData.kineticB;
-    energyChart.data.datasets[2].data = energyData.potentialA;
-    energyChart.data.datasets[3].data = energyData.potentialB;
+    energyChart.data.datasets[0].data = energyData.EA;
+    energyChart.data.datasets[1].data = energyData.EB;
+    energyChart.data.datasets[2].data = energyData.PA;
+    energyChart.data.datasets[3].data = energyData.PB;
     energyChart.update();
 
     velocityChart.data.labels = velocityData.time;
@@ -190,6 +200,15 @@ function updateCharts() {
   }
 }
 
+// Bucle principal
+function loop() {
+  update(0.02);
+  draw();
+  updateCharts();
+  requestAnimationFrame(loop);
+}
+
+// Reinicio
 function resetSimulation() {
   init();
 }
