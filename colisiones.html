@@ -3,17 +3,17 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Simulador de Colisiones - corregido</title>
+<title>Simulador de Colisiones — versión corregida</title>
 
-<!-- Chart.js CDN -->
+<!-- Chart.js (UMD build) -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
 <style>
-  body { font-family: Arial, Helvetica, sans-serif; background:#f3f4f7; margin:0; padding:16px; text-align:center;}
+  body { font-family: Arial, Helvetica, sans-serif; background:#f3f4f7; margin:0; padding:18px; text-align:center;}
   h1{margin:6px 0 14px}
   .controls{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:12px}
   .controls label{font-size:14px;margin-right:6px}
-  .controls input{width:90px;padding:6px;border-radius:6px;border:1px solid #bbb}
+  .controls input{width:110px;padding:6px;border-radius:6px;border:1px solid #bbb}
   button{padding:8px 12px;border-radius:6px;border:0;background:#0b70d0;color:#fff;cursor:pointer}
   #simCanvas{background:#fff;border:2px solid #333;border-radius:8px;display:block;margin:12px auto}
   .charts{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:12px}
@@ -22,16 +22,16 @@
 </style>
 </head>
 <body>
-  <h1>Simulador de Colisiones (corregido)</h1>
+  <h1>Simulador de Colisiones — versión corregida</h1>
 
   <div class="controls">
     <div>
       <label for="massA">Masa A (kg)</label><br>
-      <input id="massA" type="number" value="2" step="0.1" min="0.01">
+      <input id="massA" type="number" value="2.0" step="0.1" min="0.01">
     </div>
     <div>
       <label for="massB">Masa B (kg)</label><br>
-      <input id="massB" type="number" value="1" step="0.1" min="0.01">
+      <input id="massB" type="number" value="1.0" step="0.1" min="0.01">
     </div>
     <div>
       <label for="friction">Rozamiento (0–0.5)</label><br>
@@ -64,266 +64,256 @@
   </div>
 
 <script>
-/* --------- Estructura y variables globales --------- */
-const canvas = document.getElementById('simCanvas');
-const ctx = canvas.getContext('2d');
-const W = canvas.width, H = canvas.height;
+document.addEventListener('DOMContentLoaded', () => {
+  /* ---------- referencias DOM ---------- */
+  const canvas = document.getElementById('simCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
 
-const massAInput = document.getElementById('massA');
-const massBInput = document.getElementById('massB');
-const frictionInput = document.getElementById('friction');
-const restitutionInput = document.getElementById('restitution');
-const btnReset = document.getElementById('btnReset');
-const btnPause = document.getElementById('btnPause');
+  const massAInput = document.getElementById('massA');
+  const massBInput = document.getElementById('massB');
+  const frictionInput = document.getElementById('friction');
+  const restitutionInput = document.getElementById('restitution');
+  const btnReset = document.getElementById('btnReset');
+  const btnPause = document.getElementById('btnPause');
 
-let state = {
-  ballA: null,
-  ballB: null,
-  friction: 0.02,
-  restitution: 0.95,
-  running: true,
-  lastTime: null,
-  elapsed: 0
-};
+  /* ---------- estado ---------- */
+  const state = {
+    ballA: null,
+    ballB: null,
+    friction: 0.02,
+    restitution: 0.95,
+    running: true,
+    lastTime: null,
+    elapsed: 0
+  };
 
-/* parámetros de simulación */
-const MAX_POINTS = 300; // límite de puntos en gráficos
-const G = 9.8; // para energía potencial (arbitrario escala)
+  const MAX_POINTS = 300;
+  const G = 9.8; // para energía potencial (escala visual)
 
-/* helpers */
-function randVel(scale=60){ return (Math.random()*2-1)*scale; }
-function mag(vx,vy){ return Math.sqrt(vx*vx + vy*vy); }
+  /* ---------- utilitarios ---------- */
+  function randVel(scale=60){ return (Math.random()*2-1)*scale; }
+  function mag(vx,vy){ return Math.hypot(vx,vy); }
 
-/* inicializa bolas con masas y radios proporcionales */
-function initSystem(){
-  const mA = Math.max(0.01, parseFloat(massAInput.value) || 1);
-  const mB = Math.max(0.01, parseFloat(massBInput.value) || 1);
-  state.friction = Math.max(0, Math.min(0.5, parseFloat(frictionInput.value) || 0));
-  state.restitution = Math.max(0, Math.min(1, parseFloat(restitutionInput.value) || 0.95));
+  /* ---------- inicialización del sistema ---------- */
+  function initSystem(){
+    const mA = Math.max(0.01, parseFloat(massAInput.value) || 1);
+    const mB = Math.max(0.01, parseFloat(massBInput.value) || 1);
+    state.friction = Math.max(0, Math.min(0.5, parseFloat(frictionInput.value) || 0));
+    state.restitution = Math.max(0, Math.min(1, parseFloat(restitutionInput.value) || 0.95));
 
-  const rA = 8 + mA*5;
-  const rB = 8 + mB*5;
+    const rA = 8 + mA*5;
+    const rB = 8 + mB*5;
 
-  state.ballA = { x: 120, y: H/2 - 30, vx: randVel(80), vy: randVel(40), r: rA, m: mA, color:'red' };
-  state.ballB = { x: W-120, y: H/2 + 30, vx: -randVel(80), vy: -randVel(40), r: rB, m: mB, color:'blue' };
+    state.ballA = { x: 120, y: H/2 - 30, vx: randVel(80), vy: randVel(40), r: rA, m: mA, color:'red' };
+    state.ballB = { x: W-120, y: H/2 + 30, vx: -randVel(80), vy: -randVel(40), r: rB, m: mB, color:'blue' };
 
-  state.lastTime = performance.now();
-  state.elapsed = 0;
+    state.lastTime = performance.now();
+    state.elapsed = 0;
 
-  // limpiar datos de gráficas
-  clearCharts();
-}
-
-/* --------- Colisión entre dos círculos (impulso 2D) ---------
-   Usamos la implementación robusta que evita dividir por cero y
-   respeta masas y coef. de restitución en la componente normal.
-*/
-function handleBallCollision(A, B, restitution){
-  const dx = B.x - A.x, dy = B.y - A.y;
-  const dist = Math.hypot(dx,dy);
-  if(dist === 0) return;
-  const overlap = A.r + B.r - dist;
-  if(overlap > 0){
-    // separar para evitar que se queden pegados
-    const nx = dx/dist, ny = dy/dist;
-    const correction = overlap/2 + 0.01;
-    A.x -= nx * correction;
-    A.y -= ny * correction;
-    B.x += nx * correction;
-    B.y += ny * correction;
-
-    // velocidades relativas en dirección normal
-    const relVel = (A.vx - B.vx)*nx + (A.vy - B.vy)*ny;
-    if(relVel > 0) return; // se están separando
-
-    // impulso escalar
-    const impulse = -(1 + restitution) * relVel / (1/A.m + 1/B.m);
-
-    // aplicar impulso
-    const ix = impulse * nx;
-    const iy = impulse * ny;
-    A.vx += ix / A.m;
-    A.vy += iy / A.m;
-    B.vx -= ix / B.m;
-    B.vy -= iy / B.m;
+    // limpiar gráficas
+    clearCharts();
   }
-}
 
-/* rebote en paredes con restitución */
-function handleWallCollision(ball, restitution){
-  // izquierda-derecha
-  if(ball.x - ball.r < 0){
-    ball.x = ball.r;
-    if(ball.vx < 0) ball.vx = -ball.vx * restitution;
-  }
-  if(ball.x + ball.r > W){
-    ball.x = W - ball.r;
-    if(ball.vx > 0) ball.vx = -ball.vx * restitution;
-  }
-  // arriba-abajo
-  if(ball.y - ball.r < 0){
-    ball.y = ball.r;
-    if(ball.vy < 0) ball.vy = -ball.vy * restitution;
-  }
-  if(ball.y + ball.r > H){
-    ball.y = H - ball.r;
-    if(ball.vy > 0) ball.vy = -ball.vy * restitution;
-  }
-}
+  /* ---------- colisión robusta 2D entre círculos ---------- */
+  function handleBallCollision(A, B, restitution){
+    const dx = B.x - A.x, dy = B.y - A.y;
+    const dist = Math.hypot(dx,dy);
+    if(dist === 0) return;
+    const overlap = A.r + B.r - dist;
+    if(overlap > 0){
+      // separar ligeramente para evitar "pegado"
+      const nx = dx/dist, ny = dy/dist;
+      const correction = overlap/2 + 0.01;
+      A.x -= nx * correction;
+      A.y -= ny * correction;
+      B.x += nx * correction;
+      B.y += ny * correction;
 
-/* --------- Gráficos (Chart.js) --------- */
-/* los gráficos se crean una sola vez y se actualizan con .data y .update() */
-const energyCtx = document.getElementById('energyChart').getContext('2d');
-const velCtx = document.getElementById('velChart').getContext('2d');
+      // velocidad relativa en normal
+      const rel = (A.vx - B.vx)*nx + (A.vy - B.vy)*ny;
+      if(rel > 0) return; // se están separando
 
-const energyChart = new Chart(energyCtx, {
-  type: 'line',
-  data: {
-    labels: [],
-    datasets: [
-      {label:'Ecin A', data:[], borderColor:'red', tension:0.2, pointRadius:0},
-      {label:'Ecin B', data:[], borderColor:'blue', tension:0.2, pointRadius:0},
-      {label:'Epot A', data:[], borderColor:'orange', tension:0.2, pointRadius:0},
-      {label:'Epot B', data:[], borderColor:'teal', tension:0.2, pointRadius:0}
-    ]
-  },
-  options:{ animation:false, plugins:{legend:{position:'bottom'}} , scales:{x:{display:true,title:{display:true,text:'t (s)'}}}}
-});
+      // impulso escalar
+      const impulse = -(1 + restitution) * rel / (1/A.m + 1/B.m);
 
-const velChart = new Chart(velCtx, {
-  type: 'line',
-  data: {
-    labels: [],
-    datasets: [
+      const ix = impulse * nx;
+      const iy = impulse * ny;
+
+      A.vx += ix / A.m;
+      A.vy += iy / A.m;
+      B.vx -= ix / B.m;
+      B.vy -= iy / B.m;
+    }
+  }
+
+  function handleWallCollision(ball, restitution){
+    if(ball.x - ball.r < 0){
+      ball.x = ball.r;
+      if(ball.vx < 0) ball.vx = -ball.vx * restitution;
+    }
+    if(ball.x + ball.r > W){
+      ball.x = W - ball.r;
+      if(ball.vx > 0) ball.vx = -ball.vx * restitution;
+    }
+    if(ball.y - ball.r < 0){
+      ball.y = ball.r;
+      if(ball.vy < 0) ball.vy = -ball.vy * restitution;
+    }
+    if(ball.y + ball.r > H){
+      ball.y = H - ball.r;
+      if(ball.vy > 0) ball.vy = -ball.vy * restitution;
+    }
+  }
+
+  /* ---------- gráficos (Chart.js) - creados una vez ---------- */
+  const energyCtx = document.getElementById('energyChart').getContext('2d');
+  const velCtx = document.getElementById('velChart').getContext('2d');
+
+  const energyChart = new Chart(energyCtx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        {label:'Ecin A', data:[], borderColor:'red', tension:0.2, pointRadius:0},
+        {label:'Ecin B', data:[], borderColor:'blue', tension:0.2, pointRadius:0},
+        {label:'Epot A', data:[], borderColor:'orange', tension:0.2, pointRadius:0},
+        {label:'Epot B', data:[], borderColor:'teal', tension:0.2, pointRadius:0}
+      ]
+    },
+    options: { animation:false, plugins:{legend:{position:'bottom'}}, scales:{x:{title:{display:true,text:'t (s)'}}}}
+  });
+
+  const velChart = new Chart(velCtx, {
+    type: 'line',
+    data: { labels: [], datasets:[
       {label:'|v| A', data:[], borderColor:'red', tension:0.2, pointRadius:0},
       {label:'|v| B', data:[], borderColor:'blue', tension:0.2, pointRadius:0}
-    ]
-  },
-  options:{ animation:false, plugins:{legend:{position:'bottom'}}, scales:{x:{display:true,title:{display:true,text:'t (s)'}}}}
-});
-
-/* limpia datos de graficas */
-function clearCharts(){
-  [energyChart, velChart].forEach(ch=>{
-    ch.data.labels = [];
-    ch.data.datasets.forEach(ds => ds.data = []);
-    ch.update();
+    ]},
+    options:{ animation:false, plugins:{legend:{position:'bottom'}}, scales:{x:{title:{display:true,text:'t (s)'}}}}
   });
-}
 
-/* agregar un punto a las gráficas y mantener tamaño máximo */
-function pushData(t, eA, eB, pA, pB, vA, vB){
-  const ch = energyChart;
-  ch.data.labels.push(t.toFixed(2));
-  ch.data.datasets[0].data.push(eA);
-  ch.data.datasets[1].data.push(eB);
-  ch.data.datasets[2].data.push(pA);
-  ch.data.datasets[3].data.push(pB);
-  // vel
-  const ch2 = velChart;
-  ch2.data.labels.push(t.toFixed(2));
-  ch2.data.datasets[0].data.push(vA);
-  ch2.data.datasets[1].data.push(vB);
-
-  // limitar puntos
-  if(ch.data.labels.length > MAX_POINTS){
-    ch.data.labels.shift();
-    ch.data.datasets.forEach(ds => ds.data.shift());
-  }
-  if(ch2.data.labels.length > MAX_POINTS){
-    ch2.data.labels.shift();
-    ch2.data.datasets.forEach(ds => ds.data.shift());
-  }
-}
-
-/* --------- Bucle de simulación --------- */
-function step(now){
-  if(!state.running){ state.lastTime = now; requestAnimationFrame(step); return; }
-  const last = state.lastTime || now;
-  let dt = (now - last) / 1000; // segundos
-  if(dt > 0.05) dt = 0.05; // tope por frame
-  state.lastTime = now;
-  state.elapsed += dt;
-
-  // física simple: mover, aplicar rozamiento, colisiones
-  const A = state.ballA, B = state.ballB;
-  // mover
-  A.x += A.vx * dt; A.y += A.vy * dt;
-  B.x += B.vx * dt; B.y += B.vy * dt;
-
-  // rozamiento (lineal sobre velocidad)
-  const fr = state.friction;
-  A.vx *= (1 - fr*dt); A.vy *= (1 - fr*dt);
-  B.vx *= (1 - fr*dt); B.vy *= (1 - fr*dt);
-
-  // paredes
-  handleWallCollision(A, state.restitution);
-  handleWallCollision(B, state.restitution);
-
-  // colisión
-  handleBallCollision(A, B, state.restitution);
-
-  // energías
-  const vA = mag(A.vx,A.vy), vB = mag(B.vx,B.vy);
-  const EcinA = 0.5 * A.m * vA*vA;
-  const EcinB = 0.5 * B.m * vB*vB;
-  // energía potencial medida respecto a "suelo" y escalada para visualización
-  const EpotA = A.m * G * (H - A.y) * 0.01; // factor 0.01 para escala visual razonable
-  const EpotB = B.m * G * (H - B.y) * 0.01;
-
-  // push cada ciertos pasos para no saturar
-  if(Math.random() < 0.5){ // muestreo ligero (reduce carga)
-    pushData(state.elapsed, EcinA, EcinB, EpotA, EpotB, vA, vB);
-    energyChart.update('none');
-    velChart.update('none');
+  function clearCharts(){
+    [energyChart, velChart].forEach(ch => {
+      ch.data.labels = [];
+      ch.data.datasets.forEach(ds => ds.data = []);
+      ch.update();
+    });
   }
 
-  // dibujar
-  drawScene();
+  function pushData(t, eA, eB, pA, pB, vA, vB){
+    energyChart.data.labels.push(t.toFixed(2));
+    energyChart.data.datasets[0].data.push(eA);
+    energyChart.data.datasets[1].data.push(eB);
+    energyChart.data.datasets[2].data.push(pA);
+    energyChart.data.datasets[3].data.push(pB);
 
-  requestAnimationFrame(step);
-}
+    velChart.data.labels.push(t.toFixed(2));
+    velChart.data.datasets[0].data.push(vA);
+    velChart.data.datasets[1].data.push(vB);
 
-/* dibujo simple */
-function drawScene(){
-  ctx.clearRect(0,0,W,H);
-  // rectángulo límite
-  ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
-  ctx.strokeRect(1,1,W-2,H-2);
+    // limitar puntos
+    if(energyChart.data.labels.length > MAX_POINTS){
+      energyChart.data.labels.shift();
+      energyChart.data.datasets.forEach(ds => ds.data.shift());
+    }
+    if(velChart.data.labels.length > MAX_POINTS){
+      velChart.data.labels.shift();
+      velChart.data.datasets.forEach(ds => ds.data.shift());
+    }
+  }
 
-  [state.ballA, state.ballB].forEach(b=>{
-    ctx.beginPath();
-    ctx.fillStyle = b.color;
-    ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
-    ctx.fill();
-    ctx.closePath();
-    // velocidad como vector
-    ctx.beginPath();
-    ctx.moveTo(b.x, b.y);
-    ctx.lineTo(b.x + b.vx*0.12, b.y + b.vy*0.12);
-    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+  /* ---------- bucle de simulación ---------- */
+  function step(now){
+    if(!state.running){
+      state.lastTime = now;
+      requestAnimationFrame(step);
+      return;
+    }
+    const last = state.lastTime || now;
+    let dt = (now - last) / 1000;
+    if(dt > 0.05) dt = 0.05;
+    state.lastTime = now;
+    state.elapsed += dt;
+
+    // actualizar posiciones y velocidades
+    const A = state.ballA, B = state.ballB;
+    A.x += A.vx * dt; A.y += A.vy * dt;
+    B.x += B.vx * dt; B.y += B.vy * dt;
+
+    // rozamiento proporcional a dt
+    const fr = state.friction;
+    A.vx *= (1 - fr*dt); A.vy *= (1 - fr*dt);
+    B.vx *= (1 - fr*dt); B.vy *= (1 - fr*dt);
+
+    // colisiones con paredes
+    handleWallCollision(A, state.restitution);
+    handleWallCollision(B, state.restitution);
+
+    // colisión bola-bola
+    handleBallCollision(A, B, state.restitution);
+
+    // energías y muestreo periódico
+    const vA = mag(A.vx, A.vy), vB = mag(B.vx, B.vy);
+    const EcinA = 0.5 * A.m * vA * vA;
+    const EcinB = 0.5 * B.m * vB * vB;
+    const EpotA = A.m * G * (H - A.y) * 0.01;
+    const EpotB = B.m * G * (H - B.y) * 0.01;
+
+    // muestreo cada ~0.05 s (controlado por dt acumulado)
+    if(state.elapsed % 0.05 < dt){
+      pushData(state.elapsed, EcinA, EcinB, EpotA, EpotB, vA, vB);
+      energyChart.update('none');
+      velChart.update('none');
+    }
+
+    drawScene();
+    requestAnimationFrame(step);
+  }
+
+  function drawScene(){
+    ctx.clearRect(0,0,W,H);
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
+    ctx.strokeRect(1,1,W-2,H-2);
+
+    [state.ballA, state.ballB].forEach(b=>{
+      ctx.beginPath();
+      ctx.fillStyle = b.color;
+      ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
+      ctx.fill();
+      ctx.closePath();
+
+      // vector velocidad
+      ctx.beginPath();
+      ctx.moveTo(b.x, b.y);
+      ctx.lineTo(b.x + b.vx*0.12, b.y + b.vy*0.12);
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    });
+  }
+
+  /* ---------- UI events ---------- */
+  btnReset.addEventListener('click', ()=> initSystem());
+  btnPause.addEventListener('click', ()=> {
+    state.running = !state.running;
+    btnPause.textContent = state.running ? 'Pausa' : 'Reanudar';
   });
-}
 
-/* controles UI */
-btnReset.addEventListener('click', ()=>{
+  // reiniciar si cambian parámetros (masas / rozamiento / restitución)
+  [massAInput, massBInput, frictionInput, restitutionInput].forEach(inp=>{
+    inp.addEventListener('change', ()=> initSystem());
+  });
+
+  // iniciar todo
   initSystem();
-});
-btnPause.addEventListener('click', ()=>{
-  state.running = !state.running;
-  btnPause.textContent = state.running ? 'Pausa' : 'Reanudar';
-});
+  requestAnimationFrame(step);
 
-/* inicialización y arranque */
-initSystem();
-requestAnimationFrame(step);
-
-/* console helper: imprimir errores */
-window.addEventListener('error', (e)=> {
-  console.error('Error capturado:', e.message, 'en', e.filename, 'línea', e.lineno);
-  alert('Se detectó un error en la simulación. Abrí la consola (F12) para ver detalles.');
+  // captura global de errores: manda consola para depuración
+  window.addEventListener('error', (e)=> {
+    console.error('Error capturado:', e.message, 'en', e.filename, 'línea', e.lineno);
+    // no alert automático para no molestar, el usuario puede ver consola
+  });
 });
 </script>
 </body>
