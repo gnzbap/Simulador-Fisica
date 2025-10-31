@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simulador de Colisiones en Física</title>
+  <style>
+    body {
+      background-color: #f4f4f9;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+    }
+    h1 {
+      background-color: #2b2d42;
+      color: white;
+      margin: 0;
+      padding: 15px;
+    }
+    canvas {
+      display: block;
+      margin: 20px auto;
+      border: 3px solid #2b2d42;
+      background-color: #ffffff;
+      border-radius: 10px;
+    }
+    #panel {
+      margin-top: 10px;
+      font-size: 18px;
+    }
+    button {
+      margin: 10px;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      background-color: #0077b6;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #005f8d;
+    }
+    span {
+      font-weight: bold;
+      color: #2b2d42;
+    }
+  </style>
+</head>
+<body>
+  <h1>Simulador de Colisiones con Masas Diferentes</h1>
+
+  <canvas id="canvas" width="800" height="300"></canvas>
+
+  <div id="panel">
+    <p>
+      <b>Velocidad A (roja):</b> <span id="vA">0</span> m/s |
+      <b>Velocidad B (azul):</b> <span id="vB">0</span> m/s
+    </p>
+    <button onclick="iniciar()">Iniciar</button>
+    <button onclick="reiniciar()">Reiniciar</button>
+  </div>
+
+  <script>
+    // Referencias al canvas y contexto
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    // Referencias a los textos
+    const vAtext = document.getElementById("vA");
+    const vBtext = document.getElementById("vB");
+
+    // Parámetros iniciales
+    let m1 = 2; // masa esfera roja (A)
+    let m2 = 1; // masa esfera azul (B)
+    let r1 = 20 + 5 * m1; // radio proporcional a la masa
+    let r2 = 20 + 5 * m2;
+
+    // Posiciones iniciales
+    let x1 = 150;
+    let x2 = 600;
+    let v1 = 2; // velocidad inicial A
+    let v2 = -1; // velocidad inicial B
+
+    let running = false;
+
+    // Función para dibujar las esferas y actualizar texto
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Esfera A (roja)
+      ctx.beginPath();
+      ctx.arc(x1, canvas.height / 2, r1, 0, 2 * Math.PI);
+      ctx.fillStyle = "red";
+      ctx.fill();
+
+      // Esfera B (azul)
+      ctx.beginPath();
+      ctx.arc(x2, canvas.height / 2, r2, 0, 2 * Math.PI);
+      ctx.fillStyle = "blue";
+      ctx.fill();
+
+      // Actualiza los textos
+      vAtext.textContent = v1.toFixed(2);
+      vBtext.textContent = v2.toFixed(2);
+    }
+
+    // Ecuaciones del movimiento
+    function update() {
+      if (!running) return;
+
+      x1 += v1;
+      x2 += v2;
+
+      // Detección de colisión entre esferas
+      if (Math.abs(x1 - x2) <= r1 + r2) {
+        // Fórmulas del choque elástico 1D
+        const newV1 =
+          ((m1 - m2) / (m1 + m2)) * v1 + (2 * m2 / (m1 + m2)) * v2;
+        const newV2 =
+          ((m2 - m1) / (m1 + m2)) * v2 + (2 * m1 / (m1 + m2)) * v1;
+        v1 = newV1;
+        v2 = newV2;
+      }
+
+      // Rebote en los bordes del canvas
+      if (x1 - r1 < 0 || x1 + r1 > canvas.width) v1 *= -1;
+      if (x2 - r2 < 0 || x2 + r2 > canvas.width) v2 *= -1;
+
+      draw();
+      requestAnimationFrame(update);
+    }
+
+    // Iniciar animación
+    function iniciar() {
+      if (!running) {
+        running = true;
+        update();
+      }
+    }
+
+    // Reiniciar valores
+    function reiniciar() {
+      running = false;
+      m1 = 2;
+      m2 = 1;
+      r1 = 20 + 5 * m1;
+      r2 = 20 + 5 * m2;
+      x1 = 150;
+      x2 = 600;
+      v1 = 2;
+      v2 = -1;
+      draw();
+    }
+
+    // Dibuja el estado inicial
+    draw();
+  </script>
+</body>
+</html>
