@@ -1,257 +1,93 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Simulador de Colisiones — Energías</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<meta charset="UTF-8" />
+<title>Simulador de Colisiones entre Esferas</title>
 <style>
-  body { font-family: Arial, Helvetica, sans-serif; background:#f6f7fb; margin:0; padding:18px; text-align:center;}
-  h1{margin:6px 0 14px}
-  .controls{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:12px}
-  .controls label{font-size:14px;margin-right:6px}
-  .controls input{width:110px;padding:6px;border-radius:6px;border:1px solid #bbb}
-  button{padding:8px 12px;border-radius:6px;border:0;background:#0b70d0;color:#fff;cursor:pointer}
-  #simCanvas{background:#fff;border:2px solid #333;border-radius:8px;display:block;margin:12px auto}
-  .charts{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:12px}
-  .chartBox{background:#fff;border:1px solid #ccc;padding:8px;border-radius:8px}
-  small{color:#555;display:block;margin-top:6px}
-  .info {margin-top:10px; font-size:14px;}
+  body { font-family: Arial, sans-serif; }
+  canvas { border: 1px solid black; display: block; margin: 20px auto; }
+  .controls { width: 600px; margin: 0 auto; }
+  label { display: block; margin: 10px 0 5px; }
 </style>
 </head>
 <body>
-  <h1>Simulador: Energías de dos esferas</h1>
 
-  <div class="controls">
-    <div>
-      <label for="massA">Masa A (kg)</label><br>
-      <input id="massA" type="number" value="2.0" step="0.1" min="0.01">
-    </div>
-    <div>
-      <label for="massB">Masa B (kg)</label><br>
-      <input id="massB" type="number" value="1.0" step="0.1" min="0.01">
-    </div>
-    <div>
-      <label for="gravity">Gravedad (m/s²)</label><br>
-      <input id="gravity" type="number" value="9.8" step="0.1" min="0">
-    </div>
-    <div style="align-self:end">
-      <button id="btnReset">Reiniciar</button>
-      <button id="btnPause">Pausa</button>
-    </div>
-  </div>
+<h2>Simulador de Colisiones entre Dos Esferas</h2>
 
-  <canvas id="simCanvas" width="760" height="360"></canvas>
+<div class="controls">
+  <label> Masa esfera 1 (kg): <input type="range" id="mass1" min="1" max="10" value="5" /></label>
+  <label> Masa esfera 2 (kg): <input type="range" id="mass2" min="1" max="10" value="5" /></label>
+  <label> Rozamiento (0 - sin rozamiento, 1 - máximo): <input type="range" id="friction" min="0" max="1" step="0.01" value="0.02" /></label>
+  <label><input type="checkbox" id="randomBounce" /> Rebote aleatorio</label>
+  <button onclick="reset()">Reiniciar</button>
+</div>
 
-  <div class="info">
-    <span id="textTime">t = 0.00 s</span>
-  </div>
+<canvas id="canvas" width="800" height="400"></canvas>
 
-  <div class="charts">
-    <div class="chartBox">
-      <h4>Energías vs tiempo</h4>
-      <canvas id="energyChart" width="560" height="260"></canvas>
-      <small>Ecin A (rojo), Ecin B (azul), Epot A (naranja), Epot B (teal)</small>
-    </div>
-  </div>
+<h3>Velocidad Esferas</h3>
+<div id="velocities"></div>
 
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-  // DOM
-  const canvas = document.getElementById('simCanvas');
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height;
-  const massAInput = document.getElementById('massA');
-  const massBInput = document.getElementById('massB');
-  const gravityInput = document.getElementById('gravity');
-  const btnReset = document.getElementById('btnReset');
-  const btnPause = document.getElementById('btnPause');
-  const textTime = document.getElementById('textTime');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
 
-  // estado
-  let state = {
-    A: null,
-    B: null,
-    running: true,
-    lastTime: null,
-    elapsed: 0
-  };
+const mass1Range = document.getElementById('mass1');
+const mass2Range = document.getElementById('mass2');
+const frictionRange = document.getElementById('friction');
+const randomBounceCheckbox = document.getElementById('randomBounce');
 
-  const MAX_POINTS = 300;
+let sphere1 = { x: 100, y: 200, r: 30, vx: 2, vy: 0, mass: parseFloat(mass1Range.value) };
+let sphere2 = { x: 600, y: 200, r: 30, vx: -2, vy: 0, mass: parseFloat(mass2Range.value) };
 
-  // helpers
-  function randVel(scale=60){ return (Math.random()*2-1)*scale; }
-  function mag(vx,vy){ return Math.hypot(vx,vx?vy:vy); } // robusto
+let animationId;
 
-  // inicializa las bolas
-  function initSystem(){
-    const mA = Math.max(0.01, parseFloat(massAInput.value)||1);
-    const mB = Math.max(0.01, parseFloat(massBInput.value)||1);
-    const rA = 8 + mA*5;
-    const rB = 8 + mB*5;
+function reset() {
+    cancelAnimationFrame(animationId);
+    sphere1 = { x: 100, y: 200, r: 30, vx: 2, vy: 0, mass: parseFloat(mass1Range.value) };
+    sphere2 = { x: 600, y: 200, r: 30, vx: -2, vy: 0, mass: parseFloat(mass2Range.value) };
+    animate();
+}
 
-    state.A = { x: 120, y: H/2 - 30, vx: randVel(80), vy: randVel(40), r: rA, m: mA, color:'red' };
-    state.B = { x: W-120, y: H/2 + 30, vx: -randVel(80), vy: -randVel(40), r: rB, m: mB, color:'blue' };
+function updateVelocitiesDisplay() {
+    document.getElementById('velocities').innerHTML = `
+        Esfera 1: ${sphere1.vx.toFixed(2)} m/s<br>
+        Esfera 2: ${sphere2.vx.toFixed(2)} m/s
+    `;
+}
 
-    state.elapsed = 0;
-    state.lastTime = performance.now();
-
-    // limpiar gráfico
-    energyChart.data.labels = [];
-    energyChart.data.datasets.forEach(ds => ds.data = []);
-    energyChart.update();
-  }
-
-  // detección y resolución de colisión (impulso normal 2D)
-  function resolveCollision(A,B){
-    const dx = B.x - A.x, dy = B.y - A.y;
-    const dist = Math.hypot(dx,dy);
-    if(dist === 0) return;
-    const overlap = A.r + B.r - dist;
-    if(overlap <= 0) return;
-
-    // separar para evitar pegado
-    const nx = dx/dist, ny = dy/dist;
-    const corr = overlap/2 + 0.01;
-    A.x -= nx*corr; A.y -= ny*corr;
-    B.x += nx*corr; B.y += ny*corr;
-
-    // componente normal de la velocidad relativa
-    const rel = (A.vx - B.vx)*nx + (A.vy - B.vy)*ny;
-    if (rel >= 0) return; // se separan
-
-    // impulso (asumiendo restitución elástica parcial = 1)
-    const restitution = 1.0; // elasticidad pura por ahora
-    const j = -(1 + restitution) * rel / (1/A.m + 1/B.m);
-
-    const jx = j * nx, jy = j * ny;
-    A.vx += jx / A.m; A.vy += jy / A.m;
-    B.vx -= jx / B.m; B.vy -= jy / B.m;
-  }
-
-  // manejo paredes (rebote perfecto)
-  function handleWall(ball){
-    if(ball.x - ball.r < 0){ ball.x = ball.r; ball.vx = -ball.vx; }
-    if(ball.x + ball.r > W){ ball.x = W - ball.r; ball.vx = -ball.vx; }
-    if(ball.y - ball.r < 0){ ball.y = ball.r; ball.vy = -ball.vy; }
-    if(ball.y + ball.r > H){ ball.y = H - ball.r; ball.vy = -ball.vy; }
-  }
-
-  // Gráfico de energías (Chart.js)
-  const energyCtx = document.getElementById('energyChart').getContext('2d');
-  const energyChart = new Chart(energyCtx, {
-    type: 'line',
-    data: {
-      labels: [],
-      datasets: [
-        { label: 'Ecin A (J)', data: [], borderColor: 'red', tension: 0.2, pointRadius: 0 },
-        { label: 'Ecin B (J)', data: [], borderColor: 'blue', tension: 0.2, pointRadius: 0 },
-        { label: 'Epot A (J)', data: [], borderColor: 'orange', tension: 0.2, pointRadius: 0 },
-        { label: 'Epot B (J)', data: [], borderColor: 'teal', tension: 0.2, pointRadius: 0 }
-      ]
-    },
-    options: {
-      animation: false,
-      plugins: { legend: { position: 'bottom' } },
-      scales: { x: { title:{display:true, text:'t (s)'} }, y:{ title:{display:true,text:'E (J)'} } }
-    }
-  });
-
-  // añadir punto al gráfico manteniendo límite
-  function pushEnergyData(t, EcinA, EcinB, EpotA, EpotB){
-    energyChart.data.labels.push(t.toFixed(2));
-    energyChart.data.datasets[0].data.push(EcinA);
-    energyChart.data.datasets[1].data.push(EcinB);
-    energyChart.data.datasets[2].data.push(EpotA);
-    energyChart.data.datasets[3].data.push(EpotB);
-
-    if(energyChart.data.labels.length > MAX_POINTS){
-      energyChart.data.labels.shift();
-      energyChart.data.datasets.forEach(ds => ds.data.shift());
-    }
-    energyChart.update('none');
-  }
-
-  // bucle de animación / física
-  function step(now){
-    if(!state.running){ state.lastTime = now; requestAnimationFrame(step); return; }
-    const last = state.lastTime || now;
-    let dt = (now - last) / 1000;
-    if(dt > 0.05) dt = 0.05;
-    state.lastTime = now;
-    state.elapsed += dt;
-
-    // actualizar posiciones
-    const A = state.A, B = state.B;
-    A.x += A.vx * dt; A.y += A.vy * dt;
-    B.x += B.vx * dt; B.y += B.vy * dt;
-
-    // paredes
-    handleWall(A); handleWall(B);
-
-    // colisión bola-bola
-    resolveCollision(A,B);
-
-    // energías
-    const vA = Math.hypot(A.vx, A.vy), vB = Math.hypot(B.vx, B.vy);
-    const EcinA = 0.5 * A.m * vA * vA;
-    const EcinB = 0.5 * B.m * vB * vB;
-
-    // energía potencial respecto al "suelo" y con gravedad ajustable
-    const g = parseFloat(gravityInput.value) || 9.8;
-    const EpotA = A.m * g * (H - A.y) * 0.01; // factor 0.01 para escala visual
-    const EpotB = B.m * g * (H - B.y) * 0.01;
-
-    // añadir punto cada dt (puede muestrearse menos si es necesario)
-    pushEnergyData(state.elapsed, EcinA, EcinB, EpotA, EpotB);
-
-    // dibujar
-    drawScene();
-
-    // mostrar tiempo
-    textTime.textContent = 't = ' + state.elapsed.toFixed(2) + ' s';
-
-    requestAnimationFrame(step);
-  }
-
-  function drawScene(){
-    ctx.clearRect(0,0,W,H);
-    ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
-    ctx.strokeRect(1,1,W-2,H-2);
-
-    [state.A, state.B].forEach(b=>{
-      ctx.beginPath();
-      ctx.fillStyle = b.color;
-      ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
-      ctx.fill();
-      ctx.closePath();
-
-      // dibujar vector velocidad (pequeño)
-      ctx.beginPath();
-      ctx.moveTo(b.x, b.y);
-      ctx.lineTo(b.x + b.vx*0.1, b.y + b.vy*0.1);
-      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
+function animate() {
+    // Actualizar masa
+    sphere1.mass = parseFloat(mass1Range.value);
+    sphere2.mass = parseFloat(mass2Range.value);
+    
+    // Parámetros
+    const friction = parseFloat(frictionRange.value);
+    const bounceRandom = randomBounceCheckbox.checked;
+    
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Mover esferas
+    sphere1.x += sphere1.vx;
+    sphere2.x += sphere2.vx;
+    
+    // Rebotar en bordes
+    [sphere1, sphere2].forEach(s => {
+        if (s.x + s.r > canvas.width || s.x - s.r < 0) {
+            s.vx = -s.vx;
+        }
     });
-  }
-
-  // controles UI
-  btnReset.addEventListener('click', ()=> initSystem());
-  btnPause.addEventListener('click', ()=> { state.running = !state.running; btnPause.textContent = state.running ? 'Pausa' : 'Reanudar'; });
-
-  // reinicia automáticamente si se cambian masas o gravedad
-  [massAInput, massBInput, gravityInput].forEach(i => i.addEventListener('change', ()=> initSystem()));
-
-  // init + arrancar
-  initSystem();
-  requestAnimationFrame(step);
-
-  // captura errores para depurar (si aparece alguno pegalo acá)
-  window.addEventListener('error', (e)=> {
-    console.error('Error capturado:', e.message, 'en', e.filename, 'línea', e.lineno);
-  });
-});
-</script>
-</body>
-</html>
+    
+    // Detectar colisión
+    const dx = sphere2.x - sphere1.x;
+    const dy = sphere2.y - sphere1.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < sphere1.r + sphere2.r) {
+        // Efectuar colisión elástica
+        const normalX = dx / dist;
+        const normalY = dy / dist;
+        const relativeVelocity = sphere2.vx - sphere1.vx;
+        const speed = relativeVelocity * normalX;
+        
+        // Solo si se están acercando
+        if (speed < 0) {
+           
