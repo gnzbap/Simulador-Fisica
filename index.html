@@ -4,19 +4,19 @@
 <meta charset="UTF-8" />
 <title>Simulador de Colisiones entre Esferas</title>
 <style>
-  body { font-family: Arial, sans-serif; }
-  #canvasContainer { position: relative; }
-  canvas { border: 1px solid black; display: block; margin: 20px auto; }
-  .controls { width: 800px; margin: 0 auto; }
+  body { font-family: Arial, sans-serif; text-align: center; background: #f8f8f8; }
+  canvas { border: 1px solid black; display: block; margin: 20px auto; background: white; }
+  .controls { width: 600px; margin: 0 auto; text-align: left; }
   label { display: block; margin: 10px 0 5px; }
-  #velocities { margin: 20px auto; width: 800px; }
+  .value { font-weight: bold; margin-left: 8px; }
   .velocity-label {
     position: absolute;
-    font-weight: bold;
-    background: rgba(255,255,255,0.7);
-    padding: 2px 5px;
+    background: rgba(255,255,255,0.8);
+    border: 1px solid #000;
     border-radius: 4px;
-    font-size: 14px;
+    padding: 2px 5px;
+    font-size: 12px;
+    pointer-events: none;
   }
 </style>
 </head>
@@ -25,8 +25,145 @@
 <h2>Simulador de Colisiones entre Dos Esferas</h2>
 
 <div class="controls">
-  <button id="startBtn">Iniciar Simulación</button>
+  <label> Masa esfera 1 (kg): 
+    <input type="range" id="mass1" min="1" max="10" value="5" step="0.1">
+    <span id="mass1Value" class="value">5</span>
+  </label>
+
+  <label> Masa esfera 2 (kg): 
+    <input type="range" id="mass2" min="1" max="10" value="5" step="0.1">
+    <span id="mass2Value" class="value">5</span>
+  </label>
+
+  <label> Rozamiento (0 - sin rozamiento, 1 - máximo): 
+    <input type="range" id="friction" min="0" max="1" step="0.01" value="0.02">
+    <span id="frictionValue" class="value">0.02</span>
+  </label>
+
+  <label><input type="checkbox" id="randomBounce"> Rebote aleatorio</label>
   <button onclick="reset()">Reiniciar</button>
-  <br/><br/>
-  <label> Ángulo de lanzamiento (°): <input type="number" id="launchAngle" min="0" max="90" value="45" /></label>
-  <label> M>>>
+</div>
+
+<div style="position: relative; width: 800px; margin: 0 auto;">
+  <canvas id="canvas" width="800" height="400"></canvas>
+  <div id="vel1" class="velocity-label">v₁ = 0.00 m/s</div>
+  <div id="vel2" class="velocity-label">v₂ = 0.00 m/s</div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+// Controles
+const mass1Range = document.getElementById('mass1');
+const mass2Range = document.getElementById('mass2');
+const frictionRange = document.getElementById('friction');
+const randomBounceCheckbox = document.getElementById('randomBounce');
+
+// Etiquetas de valor de sliders
+const mass1Value = document.getElementById('mass1Value');
+const mass2Value = document.getElementById('mass2Value');
+const frictionValue = document.getElementById('frictionValue');
+
+// Etiquetas de velocidad flotante
+const vel1Label = document.getElementById('vel1');
+const vel2Label = document.getElementById('vel2');
+
+// Actualizar texto de sliders
+[mass1Range, mass2Range, frictionRange].forEach(input => {
+  input.addEventListener('input', () => {
+    if (input.id === 'mass1') mass1Value.textContent = input.value;
+    if (input.id === 'mass2') mass2Value.textContent = input.value;
+    if (input.id === 'friction') frictionValue.textContent = input.value;
+  });
+});
+
+let sphere1, sphere2, animationId;
+
+function reset() {
+  cancelAnimationFrame(animationId);
+  sphere1 = { x: 150, y: 200, r: 30, vx: 2, vy: 0, mass: parseFloat(mass1Range.value) };
+  sphere2 = { x: 650, y: 200, r: 30, vx: -2, vy: 0, mass: parseFloat(mass2Range.value) };
+  animate();
+}
+
+function drawSphere(sphere, color) {
+  ctx.beginPath();
+  ctx.arc(sphere.x, sphere.y, sphere.r, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.stroke();
+}
+
+function handleCollision(s1, s2, randomBounce) {
+  const dx = s2.x - s1.x;
+  const dy = s2.y - s1.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < s1.r + s2.r) {
+    // Normal unitario
+    const nx = dx / dist;
+    const ny = dy / dist;
+    // Velocidad relativa
+    const p = 2 * (s1.vx * nx - s2.vx * nx) / (s1.mass + s2.mass);
+    // Actualizar velocidades
+    s1.vx = s1.vx - p * s2.mass * nx;
+    s2.vx = s2.vx + p * s1.mass * nx;
+
+    if (randomBounce) {
+      s1.vx += (Math.random() - 0.5) * 0.5;
+      s2.vx += (Math.random() - 0.5) * 0.5;
+    }
+  }
+}
+
+function updateVelocityLabels() {
+  vel1Label.textContent = `v₁ = ${sphere1.vx.toFixed(2)} m/s`;
+  vel2Label.textContent = `v₂ = ${sphere2.vx.toFixed(2)} m/s`;
+  // Posicionar etiquetas sobre cada esfera
+  vel1Label.style.left = (canvas.offsetLeft + sphere1.x - 25) + "px";
+  vel1Label.style.top  = (canvas.offsetTop + sphere1.y - sphere1.r - 25) + "px";
+  vel2Label.style.left = (canvas.offsetLeft + sphere2.x - 25) + "px";
+  vel2Label.style.top  = (canvas.offsetTop + sphere2.y - sphere2.r - 25) + "px";
+}
+
+function animate() {
+  const friction = parseFloat(frictionRange.value);
+  const randomBounce = randomBounceCheckbox.checked;
+  sphere1.mass = parseFloat(mass1Range.value);
+  sphere2.mass = parseFloat(mass2Range.value);
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Movimiento
+  sphere1.x += sphere1.vx;
+  sphere2.x += sphere2.vx;
+
+  // Rozamiento (reduce velocidad ligeramente)
+  sphere1.vx *= (1 - friction * 0.01);
+  sphere2.vx *= (1 - friction * 0.01);
+
+  // Rebote en bordes
+  [sphere1, sphere2].forEach(s => {
+    if (s.x - s.r < 0) { s.x = s.r; s.vx = -s.vx; }
+    if (s.x + s.r > canvas.width) { s.x = canvas.width - s.r; s.vx = -s.vx; }
+  });
+
+  // Colisión entre esferas
+  handleCollision(sphere1, sphere2, randomBounce);
+
+  // Dibujar esferas
+  drawSphere(sphere1, 'red');
+  drawSphere(sphere2, 'blue');
+
+  // Actualizar velocidades visuales
+  updateVelocityLabels();
+
+  animationId = requestAnimationFrame(animate);
+}
+
+// Iniciar
+reset();
+</script>
+
+</body>
+</html>
