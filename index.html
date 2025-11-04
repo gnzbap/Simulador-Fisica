@@ -53,8 +53,8 @@
     <button onclick="togglePause()">
       <span id="pauseLabel">⏸ Pausar</span>
     </button>
-    <button onclick="launchBall()">🎱 Lanzar Esfera Roja</button>
   </div>
+  <p><b>Instrucción:</b> Haz clic sobre el lienzo para lanzar la esfera roja en esa dirección 🎱</p>
 </div>
 
 <div class="container">
@@ -72,22 +72,17 @@
 <script>
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
-
-// Gráficos separados
 const chartRed = document.getElementById('chartRed').getContext('2d');
 const chartBlue = document.getElementById('chartBlue').getContext('2d');
 
-// Controles
 const mass1Range = document.getElementById('mass1');
 const mass2Range = document.getElementById('mass2');
 const frictionRange = document.getElementById('friction');
 
-// Etiquetas de sliders
 const mass1Value = document.getElementById('mass1Value');
 const mass2Value = document.getElementById('mass2Value');
 const frictionValue = document.getElementById('frictionValue');
 
-// Etiquetas de velocidad flotantes
 const vel1Label = document.getElementById('vel1');
 const vel2Label = document.getElementById('vel2');
 
@@ -96,6 +91,8 @@ let animationId;
 let time = 0;
 let dataRed = [];
 let dataBlue = [];
+let showGuide = false;
+let guideEnd = {x:0, y:0};
 
 let sphere1, sphere2;
 
@@ -162,9 +159,7 @@ function updateVelocityLabels() {
 }
 
 function drawCharts() {
-  // Gráfico para esfera roja
   drawVelocityChart(chartRed, dataRed, "red", "Velocidad Esfera Roja");
-  // Gráfico para esfera azul
   drawVelocityChart(chartBlue, dataBlue, "blue", "Velocidad Esfera Azul");
 }
 
@@ -172,7 +167,7 @@ function drawVelocityChart(ctxChart, data, color, title) {
   ctxChart.clearRect(0, 0, 300, 180);
   ctxChart.font = "12px Arial";
   ctxChart.fillStyle = "#000";
-  ctxChart.fillText(title, 80, 15);
+  ctxChart.fillText(title, 70, 15);
 
   ctxChart.strokeStyle = "#000";
   ctxChart.beginPath();
@@ -220,7 +215,7 @@ function animate() {
     sphere2.vx *= (1 - friction * 0.01);
     sphere2.vy *= (1 - friction * 0.01);
 
-    // Rebote con bordes
+    // Bordes
     [sphere1, sphere2].forEach(s => {
       if (s.x - s.r < 0) { s.x = s.r; s.vx = -s.vx; }
       if (s.x + s.r > canvas.width) { s.x = canvas.width - s.r; s.vx = -s.vx; }
@@ -232,6 +227,18 @@ function animate() {
 
     drawSphere(sphere1, 'red');
     drawSphere(sphere2, 'blue');
+
+    // Guía de lanzamiento
+    if (showGuide) {
+      ctx.beginPath();
+      ctx.moveTo(sphere1.x, sphere1.y);
+      ctx.lineTo(guideEnd.x, guideEnd.y);
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+      ctx.setLineDash([5,5]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
     updateVelocityLabels();
 
     // Registrar datos
@@ -249,21 +256,44 @@ function animate() {
   animationId = requestAnimationFrame(animate);
 }
 
+// Control de pausa
 function togglePause() {
   paused = !paused;
   document.getElementById('pauseLabel').textContent = paused ? "▶ Reanudar" : "⏸ Pausar";
 }
 
-// Lanzamiento tipo "pool": dirección y velocidad aleatoria
-function launchBall() {
-  if (paused) paused = false;
-  const angle = Math.random() * 2 * Math.PI;
-  const speed = 6 + Math.random() * 3;
+// Lanzamiento con clic
+let isMouseDown = false;
+canvas.addEventListener('mousedown', (e) => {
+  isMouseDown = true;
+  showGuide = true;
+  const rect = canvas.getBoundingClientRect();
+  guideEnd.x = e.clientX - rect.left;
+  guideEnd.y = e.clientY - rect.top;
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if (!isMouseDown) return;
+  const rect = canvas.getBoundingClientRect();
+  guideEnd.x = e.clientX - rect.left;
+  guideEnd.y = e.clientY - rect.top;
+});
+
+canvas.addEventListener('mouseup', (e) => {
+  if (!isMouseDown) return;
+  isMouseDown = false;
+  showGuide = false;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  const dx = x - sphere1.x;
+  const dy = y - sphere1.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const speed = Math.min(dist / 20, 8); // limitar velocidad máxima
+  const angle = Math.atan2(dy, dx);
   sphere1.vx = Math.cos(angle) * speed;
   sphere1.vy = Math.sin(angle) * speed;
-  sphere2.vx = 0;
-  sphere2.vy = 0;
-}
+});
 
 reset();
 </script>
