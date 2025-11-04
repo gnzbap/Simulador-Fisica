@@ -5,9 +5,19 @@
 <title>Simulador de Colisiones entre Esferas</title>
 <style>
   body { font-family: Arial, sans-serif; }
+  #canvasContainer { position: relative; }
   canvas { border: 1px solid black; display: block; margin: 20px auto; }
-  .controls { width: 700px; margin: 0 auto; }
+  .controls { width: 800px; margin: 0 auto; }
   label { display: block; margin: 10px 0 5px; }
+  #velocities { margin: 20px auto; width: 800px; }
+  .velocity-label {
+    position: absolute;
+    font-weight: bold;
+    background: rgba(255,255,255,0.7);
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-size: 14px;
+  }
 </style>
 </head>
 <body>
@@ -19,64 +29,4 @@
   <button onclick="reset()">Reiniciar</button>
   <br/><br/>
   <label> Ángulo de lanzamiento (°): <input type="number" id="launchAngle" min="0" max="90" value="45" /></label>
-  <label> Masa de la esfera 1 (kg): <input type="range" id="mass1" min="1" max="10" value="5" /> <span id="mass1Val">5 kg</span></label>
-  <label> Masa de la esfera 2 (kg): <input type="range" id="mass2" min="1" max="10" value="5" /> <span id="mass2Val">5 kg</span></label>
-  <label> Rozamiento (N): <input type="range" id="friction" min="0" max="5" step="0.01" value="0.02" /> <span id="frictionVal">0.02 N</span></label>
-  <label><input type="checkbox" id="randomBounce" /> Rebote aleatorio de la esfera 2</label>
-</div>
-
-<canvas id="canvas" width="800" height="400"></canvas>
-
-<h3>Velocidad de las Esferas (m/s)</h3>
-<div id="velocities"></div>
-
-<script>
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-
-// Elementos de control
-const startBtn = document.getElementById('startBtn');
-const mass1Range = document.getElementById('mass1');
-const mass2Range = document.getElementById('mass2');
-const frictionRange = document.getElementById('friction');
-const randomBounceCheckbox = document.getElementById('randomBounce');
-const launchAngleInput = document.getElementById('launchAngle');
-
-const mass1Val = document.getElementById('mass1Val');
-const mass2Val = document.getElementById('mass2Val');
-const frictionVal = document.getElementById('frictionVal');
-
-mass1Range.addEventListener('input', () => {
-  mass1Val.textContent = `${mass1Range.value} kg`;
-});
-mass2Range.addEventListener('input', () => {
-  mass2Val.textContent = `${mass2Range.value} kg`;
-});
-frictionRange.addEventListener('input', () => {
-  frictionVal.textContent = `${frictionRange.value} N`;
-});
-
-// Las esferas iniciales (se crean al iniciar)
-let sphere1 = { x: 100, y: 200, r: 30, vx: 0, vy: 0, mass: parseFloat(mass1Range.value) };
-let sphere2 = { x: 700, y: 200, r: 30, vx: 0, vy: 0, mass: parseFloat(mass2Range.value) };
-
-let animationId;
-let running = false;
-
-document.getElementById('startBtn').addEventListener('click', () => {
-  if (running) return; // Evitar doble inicio
-  // Configurar condiciones iniciales
-  setupInitialConditions();
-  animate();
-});
-
-function setupInitialConditions() {
-  // Asigna masa
-  sphere1.mass = parseFloat(mass1Range.value);
-  sphere2.mass = parseFloat(mass2Range.value);
-  // Velocidad inicial basada en ángulo
-  const angleDeg = parseFloat(launchAngleInput.value);
-  const angleRad = angleDeg * Math.PI / 180;
-  const speedInicial = 10; // velocidad inicial en m/s
-  sphere1.vx = speedInicial * Math.cos(angleRad);
- 
+  <label> M>>>
